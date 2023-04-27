@@ -71,7 +71,7 @@ def main():
         with open(args.output, 'wb') as f:
             header = \
                 (header_magic_number + '\0' * 4)[:4].encode() + \
-                header_version.to_bytes(1) + \
+                header_version.to_bytes(1, 'little') + \
                 header_data_size.to_bytes(4, 'little') + \
                 (header_comment + '\0' * 64)[:64].encode()
             header += ('\0' * 256).encode()
