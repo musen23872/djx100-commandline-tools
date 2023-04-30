@@ -7,6 +7,8 @@ enum Mode : u8 {
     NAM = 0x03,
     T98 = 0x04,
     T102_B54 = 0x05,
+    DMR = 0x06,
+    HOGEHOHE = 0x0C,
     DSTAR = 0x0D,
     C4FM = 0x0E,
     AIS = 0x0F,
@@ -138,7 +140,8 @@ struct Data {
     bool enable_location;
     u32 latitude;
     u32 longitude;
-    bool bank[27];
+    u8 skip;
+    bool bank[26];
     char name[29];
     s32 shift;
     Att att;
@@ -152,8 +155,8 @@ struct Data {
     char unknown_3[10];
     U16_auto t98_uc;
     U16_auto t102_uc;
-    U16_enable t98_secret;
-    U16_enable t102_secret;
+    U16_enable t98_scramble;
+    U16_enable t102_scramble;
     U32_all t98_group;
     U32_all t102_group;
     U32_all dmr_group;
