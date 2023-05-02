@@ -8,13 +8,20 @@ enum Mode : u8 {
     T98 = 0x04,
     T102_B54 = 0x05,
     DMR = 0x06,
-    HOGEHOHE = 0x0C,
-    DSTAR = 0x0D,
-    C4FM = 0x0E,
-    AIS = 0x0F,
-    ACARS = 0x10,
-    _12KIF_W = 0x12,
-    _12kIF_N = 0x13
+    T61_typ1 = 0x07,
+    T61_typ2 = 0x08,
+    T61_typ3 = 0x09,
+    T61_typ4 = 0x0A,
+    ULT_xxx_xxxx = 0x0B,
+    ULT_Ixxx = 0x0C,
+    dPMR = 0x0D,
+    DSTAR = 0x0E,
+    C4FM = 0x0F,
+    AIS = 0x10,
+    ACARS = 0x11,
+    POCSAG = 0x12,
+    _12KIF_W = 0x13,
+    _12kIF_N = 0x14
 };
 
 enum Step : u8 {
@@ -109,6 +116,20 @@ enum Dmr_slot : u8 {
     _2
 };
 
+enum AMFM_SCRAMBLE_FREQ : u8 {
+    _2500Hz,
+    _2600Hz,
+    _2700Hz,
+    _2800Hz,
+    _2900Hz,
+    _3000Hz,
+    _3100Hz,
+    _3200Hz,
+    _3300Hz,
+    _3400Hz,
+    _3500Hz
+};
+
 bitfield U16_auto {
     value : 15;
     auto_scan : 1;
@@ -148,11 +169,16 @@ struct Data {
     Sq sq;
     Tone tone;
     u8 dcs;
-    u16 unknown_1;
+    bool amfm_scramble_enable;
+    AMFM_SCRAMBLE_FREQ amfm_scramble_freq;
     U16_auto t98_wc;
-    u16 unknown_2;
+    u16 unknown_1;
     U16_auto t102_wc;
-    char unknown_3[10];
+    u16 t61_typ1_WC;
+    u16 t61_typ2_WC;
+    u16 t61_typ3_WC;
+    u16 t61_typ4_WC;
+    u16 t61_typX_WC;
     U16_auto t98_uc;
     U16_auto t102_uc;
     U16_enable t98_scramble;
@@ -164,7 +190,9 @@ struct Data {
     U16_enable dmr_color;
     U16_enable dstar_sq;
     U16_enable c4fm_dgid;
-    char unknown_4[3];
+    u8 t61_longitude;
+    u8 t61_latitude;
+    u8 unknown_2;
 };
 
 Header header @ 0x0000;
