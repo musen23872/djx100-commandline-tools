@@ -23,17 +23,29 @@
 import serial
 import argparse
 import os
+import binascii
 
 HEADER_MAGIC_NUMBER = b'X100'
-HEADER_VERSION = 1
 HEADER_DATA_SIZE = 128000
 HEADER_LENGTH = 256
 
+def transmit_command(ser, cmd):
+    try:
+        ser.write((cmd + '\r').encode())
+    except serial.SerialTimeoutException:
+        print("Error: Write operation timed out. Please check the connection and try again.")
+        exit(-1)
+    ser.readline()
+    response = ser.readline().strip().decode()
+    return response
+
 def main():
-    parser = argparse.ArgumentParser(description='Alinco DJ-X100 memory restore script')
+    parser = argparse.ArgumentParser(description='Alinco DJ-X100 memory restore script', allow_abbrev=False)
     parser.add_argument('-i', '--input', type=str, required=True, help='Input file name (required)')
     parser.add_argument('-p', '--port', type=str, required=True, help='Serial port name (required)')
     parser.add_argument('-b', '--baudrate', type=int, default=115200, help='Baud rate (default: 115200)')
+    parser.add_argument('--skip-crc-check', action='store_true', help='Skip CRC integrity check for the input file')
+    parser.add_argument('--skip-version-check', action='store_true', help='Skip device firmware version check')
     args = parser.parse_args()
 
     start_addr = 0x20000
@@ -52,9 +64,19 @@ def main():
             if magic_number != HEADER_MAGIC_NUMBER:
                 print("Error: Invalid magic number. Please check the input file.")
                 exit(-1)
-            if version != HEADER_VERSION:
+            if not version in (1, 2):
                 print("Error: Unsupported file version. Please check the input file.")
                 exit(-1)
+            if version == 1:
+                print(f"Notice: Data version of {args.input} is 1, which does not contain a CRC in the header. Skipping CRC check.")
+            if version >= 2 and not args.skip_crc_check:
+                f.seek(0xFC)
+                header_crc = int.from_bytes(f.read(4), byteorder='little')
+                crc = binascii.crc32(f.read())
+                if header_crc != crc:
+                    print("Error: CRC mismatch. Please check the integrity of the input file.")
+                    print("If you want to skip the CRC check, you can specify the --skip-crc-check option on the command line.")
+                    exit(-1)
 
             f.seek(0, os.SEEK_END)
             actual_data_size = f.tell() - HEADER_LENGTH
@@ -74,15 +96,14 @@ def main():
         print(f"Error: {e}. Could not open port '{args.port}'. Please check the port name and try again.")
         exit(-1)
 
-    cmd = 'AL~DJ-X100\r'
-    try:
-        ser.write(cmd.encode())
-    except serial.SerialTimeoutException:
-        print("Error: Write operation timed out. Please check the connection and try again.")
-        exit(-1)
+    if not args.skip_version_check:
+        response = transmit_command(ser, 'AL~VER')
+        if response != 'ver 1.00-003':
+            print("Error: Device returned an unexpected firmware version number. Please check the device and try again.")
+            print("If you want to skip the firmware version check, add --skip-version-check to the command line options.")
+            exit(-1)
 
-    ser.readline()
-    response = ser.readline().strip().decode()
+    response = transmit_command(ser, 'AL~DJ-X100')
     if response != 'OK':
         print("Error: No response from the device or timed out. Please check the connection and try again.")
         exit(-1)
@@ -95,19 +116,14 @@ def main():
         offset = addr - start_addr
 
         # Read current data from the device
-        cmd = f'AL~F{addr:05X}M\r'
-        ser.write(cmd.encode())
-        ser.readline()
-        current_data = bytes.fromhex(ser.readline().strip().decode())
+        response = transmit_command(ser, f'AL~F{addr:05X}M')
+        current_data = bytes.fromhex(response)
 
         # Compare and write new data if it's different
         for i in range(0, 256, 128):
             new_data = data[offset + i:offset + i + 128]
             if new_data != current_data[i:i + 128]:
-                cmd = f'AL~F{addr + i:05X}W{new_data.hex().upper()}\r'
-                ser.write(cmd.encode())
-                ser.readline()
-                response = ser.readline().strip().decode()
+                response = transmit_command(ser, f'AL~F{addr + i:05X}W{new_data.hex().upper()}')
                 if response != 'OK':
                     print(f"Error: Failed to write data at address {addr + i:05X}. Please check the connection and try again.")
                     exit(-1)
@@ -115,8 +131,7 @@ def main():
         print(f"Restoring memory: {current_page}/{page_total}", end='\r')
 
     # Restart the device
-    cmd = 'AL~RESTART\r'
-    ser.write(cmd.encode())
+    transmit_command(ser, 'AL~RESTART')
     print("\nMemory restore complete. Device has been restarted.")
 
     ser.close()

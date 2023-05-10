@@ -1,3 +1,5 @@
 .venv/
+temp/
+*.csv
 *.dat
 *.bin
