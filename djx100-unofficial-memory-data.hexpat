@@ -145,12 +145,22 @@ bitfield U32_all {
     all : 1;
 };
 
+struct Section {
+    u32 start_address;
+    u32 size;
+    u32 reserved1;
+    u32 reserved2;
+};
+
 struct Header {
     u32  magic;
     u8   version;
     u32  data_size;
     char comment[64];
-    char reserved[183];
+    char reserved1[39];
+    Section section[8];
+    char reserved2[12];
+    u32  crc;
 };
 
 struct Data {

@@ -25,6 +25,12 @@ import argparse
 import binascii
 import os
 import struct
+from enum import IntEnum
+
+class SectionType(IntEnum):
+    CHANNEL_MEMORY = 1,
+    OTHER = 0
+
 
 def transmit_command(ser, cmd):
     try:
@@ -46,13 +52,17 @@ def main():
     args = parser.parse_args()
 
     header_magic_number = 'X100'
-    header_version = 2
-    header_data_size = 128000
-    header_comment = 'Alinco DJ-X100 **Unofficial** Memory Backup Data'
-    header_crc_pos = 0xFC
+    header_version = 3
+    header_comment = f'Alinco DJ-X100 **Unofficial** Memory Backup Data v{header_version}'
+    header_data_size_pos = 0x05
+    header_section_table_pos = 0x70
+    header_crc_pos = 0xfc
 
-    start_addr = 0x20000
-    end_addr = 0x3f3ff
+    number_of_section = 8
+    section_table_size = number_of_section * 16
+
+    section1_start_addr = 0x20000
+    section1_end_addr = 0x3f3ff
 
     try:
         ser = serial.Serial(args.port, args.baudrate, timeout=5, write_timeout=5)
@@ -72,7 +82,7 @@ def main():
         print("Error: No response from the device or timed out. Please check the connection and try again.")
         exit(-1)
 
-    page_total = int((end_addr - start_addr) / 0x100) + 1
+    page_total = int((section1_end_addr - section1_start_addr) / 0x100) + 1
 
     if not args.force and os.path.exists(args.output):
         confirm = input(f"The file '{args.output}' already exists. Do you want to overwrite it? (y/N): ")
@@ -82,25 +92,37 @@ def main():
 
     try:
         with open(args.output, 'wb') as f:
-            header = \
-                (header_magic_number + '\0' * 4)[:4].encode() + \
-                header_version.to_bytes(1, 'little') + \
-                header_data_size.to_bytes(4, 'little') + \
-                (header_comment + '\0' * 64)[:64].encode()
-            header += ('\0' * 256).encode()
-            f.write(header[:256])
-
             crc = 0
-            for current_page, addr in enumerate(range(start_addr, end_addr, 0x100), start=1):
+            write_bytes = 0
+            section = [[section1_start_addr, section1_end_addr - section1_start_addr + 1, SectionType.CHANNEL_MEMORY, 0xff, 0xffff, 0xffffffff]] + [[0xffffffff, 0xffffffff, 0xff, 0xff, 0xffff, 0xffffffff] for _ in range(number_of_section - 1)]
+            # Start Address(4), Size(4), Section Type(1), Reserved(7)
+            section_format_string = 'IIBBHI' * number_of_section
+            header = struct.pack(f'<4sBI64s39s{section_format_string}12sI', 
+                        header_magic_number.encode(),
+                        header_version,
+                        0,
+                        header_comment.encode(),
+                        ''.encode(),
+                        *sum(section, []),
+                        b'\xff' * 60,
+                        crc
+                        )
+            f.write(header)
+            # Use the section table data as the initial value for the CRC
+            crc = binascii.crc32(header[header_section_table_pos:header_section_table_pos + section_table_size], 0)
+            for current_page, addr in enumerate(range(section1_start_addr, section1_end_addr, 0x100), start=1):
                 print(f'\rReading memory page {current_page} of {page_total}', end='', flush=True)
                 response = transmit_command(ser, f'AL~F{addr:05X}M')
                 if not response:
                     print("\nError: No response from the device or timed out. Please check the connection and try again.")
                     exit(-1)
                 binary_data = bytes.fromhex(response)
-                f.write(binary_data)
+                write_bytes += f.write(binary_data)
                 crc = binascii.crc32(binary_data, crc)
 
+            # Write the data size and CRC to the header
+            f.seek(header_data_size_pos)
+            f.write(struct.pack('<I', write_bytes))
             f.seek(header_crc_pos)
             f.write(struct.pack('<I', crc))
             print("\nMemory backup completed successfully. Saved to:", args.output)
