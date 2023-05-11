@@ -90,6 +90,13 @@ def main():
         print(f"Error: {e}. Could not open the file '{args.input}' for reading. Please check the file permissions.")
         exit(-1)
 
+    if start_addr < 0x20000:
+        print('警告: 重要なデータを含むメモリを上書きしようとしているためデバイスが壊れる可能性があります。この操作は元に戻せません。本当に続行しますか？')
+        confirm = input('Warning: You are about to overwrite memory that contains important data, which may potentially brick the device. This operation is irreversible. Are you sure you want to proceed? (y/N):')
+        if confirm.lower() != 'y':
+            print("Aborted.")
+            exit(0)
+
     try:
         ser = serial.Serial(args.port, args.baudrate, timeout=5, write_timeout=5)
     except serial.serialutil.SerialException as e:

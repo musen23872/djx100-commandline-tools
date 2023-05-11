@@ -1,5 +1,9 @@
 .venv/
+build/
+dist/
 temp/
 *.csv
 *.dat
 *.bin
+*.tmp
+*.spec
